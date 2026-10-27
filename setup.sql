@@ -1,172 +1,250 @@
--- 1. Enable RLS on both tables
-ALTER TABLE public.items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.stock_movements ENABLE ROW LEVEL SECURITY;
+-- ==========================================
+-- STEP 1: CREATE TABLES & MIGRATE OLD DATA
+-- ==========================================
 
--- 2. Drop existing open policies so direct table access is restricted
-DROP POLICY IF EXISTS "Enable read access for all users" ON public.items;
-DROP POLICY IF EXISTS "Enable insert access for all users" ON public.items;
-DROP POLICY IF EXISTS "Enable read access for all users" ON public.stock_movements;
-DROP POLICY IF EXISTS "Enable insert access for all users" ON public.stock_movements;
-
--- 3. Stored RPC Functions (With Admin Role Checks)
-CREATE OR REPLACE FUNCTION public.add_item(p_name text)
-RETURNS json
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_result json;
-  v_role text;
-BEGIN
-  -- Verify the user has the admin role
-  SELECT role INTO v_role FROM public.user_roles WHERE user_id = auth.uid();
-  IF v_role IS DISTINCT FROM 'admin' THEN
-    RAISE EXCEPTION 'Access denied: Requires admin role.';
-  END IF;
-
-  INSERT INTO public.items (name)
-  VALUES (p_name)
-  RETURNING to_json(items.*) INTO v_result;
-  RETURN v_result;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.update_item(p_id bigint, p_name text)
-RETURNS json
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_result json;
-BEGIN
-  UPDATE public.items
-  SET name = p_name
-  WHERE id = p_id
-  RETURNING to_json(items.*) INTO v_result;
-  RETURN v_result;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.list_items()
-RETURNS json
-LANGUAGE sql
-SECURITY DEFINER
-AS $$
-  SELECT coalesce(json_agg(t), '[]'::json)
-  FROM (
-    SELECT id, name, created_at
-    FROM public.items
-    ORDER BY id ASC
-  ) t;
-$$;
-
-CREATE OR REPLACE FUNCTION public.add_movement(p_item_id bigint, p_movement_type text, p_quantity int)
-RETURNS json
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_result json;
-  v_role text;
-BEGIN
-  -- Verify the user has the admin role
-  SELECT role INTO v_role FROM public.user_roles WHERE user_id = auth.uid();
-  IF v_role IS DISTINCT FROM 'admin' THEN
-    RAISE EXCEPTION 'Access denied: Requires admin role.';
-  END IF;
-
-  IF p_quantity <= 0 THEN
-    RAISE EXCEPTION 'Quantity must be greater than zero.';
-  END IF;
-
-  INSERT INTO public.stock_movements (item_id, movement_type, quantity)
-  VALUES (p_item_id, p_movement_type, p_quantity)
-  RETURNING to_json(stock_movements.*) INTO v_result;
-  RETURN v_result;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.update_movement(p_id bigint, p_item_id bigint, p_movement_type text, p_quantity int)
-RETURNS json
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_result json;
-BEGIN
-  IF p_quantity <= 0 THEN
-    RAISE EXCEPTION 'Quantity must be greater than zero.';
-  END IF;
-
-  UPDATE public.stock_movements
-  SET item_id = p_item_id,
-      movement_type = p_movement_type,
-      quantity = p_quantity
-  WHERE id = p_id
-  RETURNING to_json(stock_movements.*) INTO v_result;
-  RETURN v_result;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.list_movements(p_item_id bigint DEFAULT NULL)
-RETURNS json
-LANGUAGE sql
-SECURITY DEFINER
-AS $$
-  SELECT coalesce(json_agg(t), '[]'::json)
-  FROM (
-    SELECT m.id, m.item_id, i.name AS item_name, m.movement_type, m.quantity, m.movement_date
-    FROM public.stock_movements m
-    JOIN public.items i ON i.id = m.item_id
-    WHERE (p_item_id IS NULL OR m.item_id = p_item_id)
-    ORDER BY m.movement_date DESC, m.id DESC
-  ) t;
-$$;
-
-CREATE OR REPLACE FUNCTION public.get_stock()
-RETURNS json
-LANGUAGE sql
-SECURITY DEFINER
-AS $$
-  SELECT coalesce(json_agg(t), '[]'::json)
-  FROM (
-    SELECT 
-      i.id,
-      i.name,
-      coalesce(SUM(CASE WHEN m.movement_type = 'IN' THEN m.quantity ELSE -m.quantity END), 0) AS current_stock
-    FROM public.items i
-    LEFT JOIN public.stock_movements m ON i.id = m.item_id
-    GROUP BY i.id, i.name
-    ORDER BY i.id ASC
-  ) t;
-$$;
-
--- 4. Grant Authenticated Access and Enforce Read Policies
-GRANT EXECUTE ON FUNCTION public.add_item(text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.update_item(bigint, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.list_items() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.add_movement(bigint, text, int) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.update_movement(bigint, bigint, text, int) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.list_movements(bigint) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_stock() TO authenticated;
-
-CREATE POLICY "Allow authenticated read items" ON public.items FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow authenticated read movements" ON public.stock_movements FOR SELECT TO authenticated USING (true);
-
--- 5. User Roles Architecture
-CREATE TABLE IF NOT EXISTS public.user_roles (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  role text NOT NULL CHECK (role IN ('admin', 'user')),
-  created_at timestamp with time zone DEFAULT now(),
-  UNIQUE(user_id)
+-- 1. Create Tbl04Role
+CREATE TABLE public."Tbl04Role" (
+    role_id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    role_code text UNIQUE NOT NULL,
+    role_name text NOT NULL,
+    level_number int NOT NULL,
+    description text
 );
 
-ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+-- Insert the standard roles
+INSERT INTO public."Tbl04Role" (role_code, role_name, level_number, description) VALUES
+('VIEWER', 'Viewer', 1, 'Read only'),
+('OPERATOR', 'Operator', 2, 'Add items and movements'),
+('MANAGER', 'Manager', 3, 'Operator + correct movements'),
+('ADMIN', 'Administrator', 4, 'Manager + assign roles');
 
-DROP POLICY IF EXISTS "Users can read own role" ON public.user_roles;
-CREATE POLICY "Users can read own role" 
-ON public.user_roles 
-FOR SELECT 
-TO authenticated 
-USING (auth.uid() = user_id);
+-- 2. Create Tbl04UserRole
+CREATE TABLE public."Tbl04UserRole" (
+    id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE NOT NULL,
+    role_id bigint REFERENCES public."Tbl04Role"(role_id) NOT NULL,
+    granted_by uuid REFERENCES auth.users(id),
+    granted_at timestamp with time zone DEFAULT now()
+);
+
+-- 3. Create Tbl04RoleLog (Change Log)
+CREATE TABLE public."Tbl04RoleLog" (
+    id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    user_id uuid REFERENCES auth.users(id) NOT NULL,
+    old_role_id bigint REFERENCES public."Tbl04Role"(role_id),
+    new_role_id bigint REFERENCES public."Tbl04Role"(role_id),
+    action text NOT NULL, -- grant, change, revoke
+    changed_by uuid REFERENCES auth.users(id),
+    changed_at timestamp with time zone DEFAULT now()
+);
+
+-- 4. Secure the new tables (RLS ON, no direct browser access)
+ALTER TABLE public."Tbl04Role" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."Tbl04UserRole" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."Tbl04RoleLog" ENABLE ROW LEVEL SECURITY;
+
+-- 5. Migrate old users from user_roles to Tbl04UserRole
+INSERT INTO public."Tbl04UserRole" (user_id, role_id)
+SELECT user_id, (SELECT role_id FROM public."Tbl04Role" WHERE role_code = 'ADMIN')
+FROM public.user_roles WHERE role = 'admin'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public."Tbl04UserRole" (user_id, role_id)
+SELECT user_id, (SELECT role_id FROM public."Tbl04Role" WHERE role_code = 'VIEWER')
+FROM public.user_roles WHERE role = 'user'
+ON CONFLICT DO NOTHING;
+
+
+-- ==========================================
+-- STEP 2: CREATE NEW RPC FUNCTIONS
+-- ==========================================
+
+-- A. get_my_role (Any signed-in user)
+CREATE OR REPLACE FUNCTION public.get_my_role()
+RETURNS json
+LANGUAGE sql SECURITY DEFINER AS $$
+  SELECT to_json(r.*)
+  FROM public."Tbl04UserRole" ur
+  JOIN public."Tbl04Role" r ON ur.role_id = r.role_id
+  WHERE ur.user_id = auth.uid();
+$$;
+
+-- B. assign_role (Level 4 only)
+CREATE OR REPLACE FUNCTION public.assign_role(p_email text, p_role_code text)
+RETURNS text
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    v_admin_level int;
+    v_target_user_id uuid;
+    v_new_role_id bigint;
+    v_old_role_id bigint;
+    v_action text;
+BEGIN
+    SELECT coalesce(r.level_number, 0) INTO v_admin_level FROM public."Tbl04UserRole" ur JOIN public."Tbl04Role" r ON ur.role_id = r.role_id WHERE ur.user_id = auth.uid();
+    IF v_admin_level < 4 THEN RAISE EXCEPTION 'Access denied. Requires Administrator (Level 4).'; END IF;
+
+    SELECT id INTO v_target_user_id FROM auth.users WHERE email = p_email;
+    IF v_target_user_id IS NULL THEN RAISE EXCEPTION 'User with email % not found.', p_email; END IF;
+
+    SELECT role_id INTO v_new_role_id FROM public."Tbl04Role" WHERE role_code = p_role_code;
+    IF v_new_role_id IS NULL THEN RAISE EXCEPTION 'Role code % not found.', p_role_code; END IF;
+
+    SELECT role_id INTO v_old_role_id FROM public."Tbl04UserRole" WHERE user_id = v_target_user_id;
+
+    IF v_old_role_id IS NULL THEN
+        v_action := 'grant';
+        INSERT INTO public."Tbl04UserRole" (user_id, role_id, granted_by, granted_at) VALUES (v_target_user_id, v_new_role_id, auth.uid(), now());
+    ELSE
+        v_action := 'change';
+        UPDATE public."Tbl04UserRole" SET role_id = v_new_role_id, granted_by = auth.uid(), granted_at = now() WHERE user_id = v_target_user_id;
+    END IF;
+
+    INSERT INTO public."Tbl04RoleLog" (user_id, old_role_id, new_role_id, action, changed_by, changed_at)
+    VALUES (v_target_user_id, v_old_role_id, v_new_role_id, v_action, auth.uid(), now());
+
+    RETURN 'Role assigned successfully.';
+END;
+$$;
+
+-- C. revoke_role (Level 4 only)
+CREATE OR REPLACE FUNCTION public.revoke_role(p_email text)
+RETURNS text
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    v_admin_level int;
+    v_target_user_id uuid;
+    v_old_role_id bigint;
+    v_admin_role_id bigint;
+    v_admin_count int;
+BEGIN
+    SELECT coalesce(r.level_number, 0) INTO v_admin_level FROM public."Tbl04UserRole" ur JOIN public."Tbl04Role" r ON ur.role_id = r.role_id WHERE ur.user_id = auth.uid();
+    IF v_admin_level < 4 THEN RAISE EXCEPTION 'Access denied. Requires Administrator (Level 4).'; END IF;
+
+    SELECT id INTO v_target_user_id FROM auth.users WHERE email = p_email;
+    IF v_target_user_id IS NULL THEN RAISE EXCEPTION 'User with email % not found.', p_email; END IF;
+
+    SELECT role_id INTO v_old_role_id FROM public."Tbl04UserRole" WHERE user_id = v_target_user_id;
+    IF v_old_role_id IS NULL THEN RAISE EXCEPTION 'User does not have a role to revoke.'; END IF;
+
+    SELECT role_id INTO v_admin_role_id FROM public."Tbl04Role" WHERE role_code = 'ADMIN';
+    IF v_old_role_id = v_admin_role_id THEN
+        SELECT count(*) INTO v_admin_count FROM public."Tbl04UserRole" WHERE role_id = v_admin_role_id;
+        IF v_admin_count <= 1 THEN RAISE EXCEPTION 'Cannot revoke the last Administrator.'; END IF;
+    END IF;
+
+    DELETE FROM public."Tbl04UserRole" WHERE user_id = v_target_user_id;
+    INSERT INTO public."Tbl04RoleLog" (user_id, old_role_id, new_role_id, action, changed_by, changed_at)
+    VALUES (v_target_user_id, v_old_role_id, NULL, 'revoke', auth.uid(), now());
+
+    RETURN 'Role revoked successfully.';
+END;
+$$;
+
+-- D. list_accounts_with_roles (Level 4 only)
+CREATE OR REPLACE FUNCTION public.list_accounts_with_roles()
+RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    v_admin_level int; v_result json;
+BEGIN
+    SELECT coalesce(r.level_number, 0) INTO v_admin_level FROM public."Tbl04UserRole" ur JOIN public."Tbl04Role" r ON ur.role_id = r.role_id WHERE ur.user_id = auth.uid();
+    IF v_admin_level < 4 THEN RAISE EXCEPTION 'Access denied.'; END IF;
+
+    SELECT coalesce(json_agg(t), '[]'::json) INTO v_result
+    FROM (
+        SELECT u.email, r.role_code, r.role_name, r.level_number, ur.granted_at
+        FROM public."Tbl04UserRole" ur
+        JOIN public."Tbl04Role" r ON ur.role_id = r.role_id
+        JOIN auth.users u ON u.id = ur.user_id
+        ORDER BY r.level_number DESC, u.email ASC
+    ) t;
+    RETURN v_result;
+END;
+$$;
+
+-- E. list_history (Level 4 only)
+CREATE OR REPLACE FUNCTION public.list_history()
+RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    v_admin_level int; v_result json;
+BEGIN
+    SELECT coalesce(r.level_number, 0) INTO v_admin_level FROM public."Tbl04UserRole" ur JOIN public."Tbl04Role" r ON ur.role_id = r.role_id WHERE ur.user_id = auth.uid();
+    IF v_admin_level < 4 THEN RAISE EXCEPTION 'Access denied.'; END IF;
+
+    SELECT coalesce(json_agg(t), '[]'::json) INTO v_result
+    FROM (
+        SELECT u.email AS target_email, ro.role_name AS old_role, rn.role_name AS new_role, l.action, ub.email AS changed_by_email, l.changed_at
+        FROM public."Tbl04RoleLog" l
+        JOIN auth.users u ON u.id = l.user_id
+        LEFT JOIN public."Tbl04Role" ro ON ro.role_id = l.old_role_id
+        LEFT JOIN public."Tbl04Role" rn ON rn.role_id = l.new_role_id
+        LEFT JOIN auth.users ub ON ub.id = l.changed_by
+        ORDER BY l.changed_at DESC
+    ) t;
+    RETURN v_result;
+END;
+$$;
+
+
+-- ==========================================
+-- STEP 3: UPDATE EXISTING RPCs (LEVEL CHECKS)
+-- ==========================================
+
+-- READ FUNCTIONS (Level 1+)
+CREATE OR REPLACE FUNCTION public.list_items() RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_level int; v_result json; BEGIN
+  SELECT coalesce(r.level_number, 0) INTO v_level FROM public."Tbl04UserRole" ur JOIN public."Tbl04Role" r ON ur.role_id = r.role_id WHERE ur.user_id = auth.uid();
+  IF v_level < 1 THEN RAISE EXCEPTION 'Access denied (Requires Level 1+).'; END IF;
+  SELECT coalesce(json_agg(t), '[]'::json) INTO v_result FROM (SELECT id, name, created_at FROM public.items ORDER BY id ASC) t; RETURN v_result;
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.list_movements(p_item_id bigint DEFAULT NULL) RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_level int; v_result json; BEGIN
+  SELECT coalesce(r.level_number, 0) INTO v_level FROM public."Tbl04UserRole" ur JOIN public."Tbl04Role" r ON ur.role_id = r.role_id WHERE ur.user_id = auth.uid();
+  IF v_level < 1 THEN RAISE EXCEPTION 'Access denied (Requires Level 1+).'; END IF;
+  SELECT coalesce(json_agg(t), '[]'::json) INTO v_result FROM (SELECT m.id, m.item_id, i.name AS item_name, m.movement_type, m.quantity, m.movement_date FROM public.stock_movements m JOIN public.items i ON i.id = m.item_id WHERE (p_item_id IS NULL OR m.item_id = p_item_id) ORDER BY m.movement_date DESC, m.id DESC) t; RETURN v_result;
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.get_stock() RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_level int; v_result json; BEGIN
+  SELECT coalesce(r.level_number, 0) INTO v_level FROM public."Tbl04UserRole" ur JOIN public."Tbl04Role" r ON ur.role_id = r.role_id WHERE ur.user_id = auth.uid();
+  IF v_level < 1 THEN RAISE EXCEPTION 'Access denied (Requires Level 1+).'; END IF;
+  SELECT coalesce(json_agg(t), '[]'::json) INTO v_result FROM (SELECT i.id, i.name, coalesce(SUM(CASE WHEN m.movement_type = 'IN' THEN m.quantity ELSE -m.quantity END), 0) AS current_stock FROM public.items i LEFT JOIN public.stock_movements m ON i.id = m.item_id GROUP BY i.id, i.name ORDER BY i.id ASC) t; RETURN v_result;
+END; $$;
+
+-- WRITE FUNCTIONS (Level 2+)
+CREATE OR REPLACE FUNCTION public.add_item(p_name text) RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_level int; v_result json; BEGIN
+  SELECT coalesce(r.level_number, 0) INTO v_level FROM public."Tbl04UserRole" ur JOIN public."Tbl04Role" r ON ur.role_id = r.role_id WHERE ur.user_id = auth.uid();
+  IF v_level < 2 THEN RAISE EXCEPTION 'Access denied (Requires Operator Level 2+).'; END IF;
+  INSERT INTO public.items (name) VALUES (p_name) RETURNING to_json(items.*) INTO v_result; RETURN v_result;
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.add_movement(p_item_id bigint, p_movement_type text, p_quantity int) RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_level int; v_result json; BEGIN
+  SELECT coalesce(r.level_number, 0) INTO v_level FROM public."Tbl04UserRole" ur JOIN public."Tbl04Role" r ON ur.role_id = r.role_id WHERE ur.user_id = auth.uid();
+  IF v_level < 2 THEN RAISE EXCEPTION 'Access denied (Requires Operator Level 2+).'; END IF;
+  IF p_quantity <= 0 THEN RAISE EXCEPTION 'Quantity must be greater than zero.'; END IF;
+  INSERT INTO public.stock_movements (item_id, movement_type, quantity) VALUES (p_item_id, p_movement_type, p_quantity) RETURNING to_json(stock_movements.*) INTO v_result; RETURN v_result;
+END; $$;
+
+-- UPDATE FUNCTIONS (Level 3+)
+CREATE OR REPLACE FUNCTION public.update_movement(p_id bigint, p_item_id bigint, p_movement_type text, p_quantity int) RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_level int; v_result json; BEGIN
+  SELECT coalesce(r.level_number, 0) INTO v_level FROM public."Tbl04UserRole" ur JOIN public."Tbl04Role" r ON ur.role_id = r.role_id WHERE ur.user_id = auth.uid();
+  IF v_level < 3 THEN RAISE EXCEPTION 'Access denied (Requires Manager Level 3+).'; END IF;
+  IF p_quantity <= 0 THEN RAISE EXCEPTION 'Quantity must be greater than zero.'; END IF;
+  UPDATE public.stock_movements SET item_id = p_item_id, movement_type = p_movement_type, quantity = p_quantity WHERE id = p_id RETURNING to_json(stock_movements.*) INTO v_result; RETURN v_result;
+END; $$;
+
+-- ==========================================
+-- STEP 4: STRICT RLS POLICIES FOR TABLES
+-- ==========================================
+DROP POLICY IF EXISTS "Allow authenticated read items" ON public.items;
+DROP POLICY IF EXISTS "Allow authenticated read movements" ON public.stock_movements;
+
+-- Only accounts that actively hold a role in Tbl04UserRole can read the base tables
+CREATE POLICY "Allow role read items" ON public.items FOR SELECT TO authenticated
+USING (EXISTS (SELECT 1 FROM public."Tbl04UserRole" WHERE user_id = auth.uid()));
+
+CREATE POLICY "Allow role read movements" ON public.stock_movements FOR SELECT TO authenticated
+USING (EXISTS (SELECT 1 FROM public."Tbl04UserRole" WHERE user_id = auth.uid()));
