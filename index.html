@@ -141,17 +141,16 @@
       if (session) {
         document.getElementById('auth-message').textContent = "Loading access...";
         
-        // Call the get_my_role function
-        const { data: roles, error } = await client.rpc('get_my_role');
+        // Call the get_my_role function (BUG FIXED HERE)
+        const { data: myRole, error } = await client.rpc('get_my_role');
         
-        if (error || !roles || roles.length === 0) {
+        if (error || !myRole) {
           // No access to logistics
           document.getElementById('auth-message').textContent = "No access to Logistics, ask the module administrator.";
           await client.auth.signOut();
           return;
         }
 
-        const myRole = roles[0];
         userLevel = myRole.level_number;
         document.getElementById('user-role-display').textContent = myRole.role_name + " (L" + userLevel + ")";
         
