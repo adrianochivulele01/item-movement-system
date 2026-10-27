@@ -3,19 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Item Movement System</title>
+  <title>TCM Item Movement System</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     .hidden { display: none !important; }
     #auth-section { max-width: 400px; margin: 4rem auto; text-align: center; }
     .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+    .role-badge { background: #e2e8f0; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; margin-left: 10px; }
   </style>
 </head>
 <body>
   <div class="container">
     
-    <!-- AUTHENTICATION SECTION -->
+    <!-- AUTHENTICATION SECTION (Sign Up Removed) -->
     <div id="auth-section" class="card">
       <h2>TCM System Login</h2>
       <form id="auth-form">
@@ -25,93 +26,104 @@
         <label for="password">Password:</label>
         <input type="password" id="password" required placeholder="Enter password" />
         
-        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-          <button type="button" id="login-btn" style="flex: 1;">Log In</button>
-          <button type="button" id="signup-btn" style="flex: 1; background-color: var(--text-muted);">Sign Up</button>
-        </div>
+        <button type="button" id="login-btn" style="width: 100%; margin-top: 1rem;">Log In</button>
       </form>
-      <p id="auth-message" style="color: var(--danger); margin-top: 1rem; font-size: 0.9rem;"></p>
+      <p id="auth-message" style="color: var(--danger); margin-top: 1rem; font-size: 0.9rem; font-weight: bold;"></p>
     </div>
 
     <!-- MAIN DASHBOARD SECTION -->
     <div id="dashboard-section" class="hidden">
       <div class="header-bar">
-        <h1>Item Movement & Inventory System</h1>
+        <div>
+          <h1 style="display: inline-block;">Item Movement & Inventory System</h1>
+          <span id="user-role-display" class="role-badge">Loading Role...</span>
+        </div>
         <button id="logout-btn" style="background-color: var(--danger);">Sign Out</button>
+      </div>
+
+      <!-- Administrator Access Management (Level 4 Only) -->
+      <div id="admin-panel" class="card hidden" style="border: 2px solid #4f46e5;">
+        <h2>Access Management (Administrator Only)</h2>
+        <form id="assign-role-form" style="display: flex; gap: 1rem; align-items: flex-end; margin-bottom: 1rem;">
+          <div style="flex: 1;">
+            <label>User Email:</label>
+            <input type="email" id="target-email" required>
+          </div>
+          <div style="flex: 1;">
+            <label>Role:</label>
+            <select id="target-role" required>
+              <option value="VIEWER">Viewer (Level 1)</option>
+              <option value="OPERATOR">Operator (Level 2)</option>
+              <option value="MANAGER">Manager (Level 3)</option>
+              <option value="ADMIN">Administrator (Level 4)</option>
+            </select>
+          </div>
+          <button type="submit" style="background-color: #4f46e5;">Assign Role</button>
+        </form>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div>
+            <h3>Accounts with Roles</h3>
+            <table style="font-size: 0.8rem;">
+              <thead><tr><th>Email</th><th>Role</th><th>Action</th></tr></thead>
+              <tbody id="accounts-tbody"></tbody>
+            </table>
+          </div>
+          <div>
+            <h3>Role History</h3>
+            <table style="font-size: 0.8rem;">
+              <thead><tr><th>Email</th><th>Action</th><th>Date</th></tr></thead>
+              <tbody id="history-tbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- Dashboard Cards -->
       <div class="dashboard-grid">
-        <div class="card">
-          <h3>Total Items</h3>
-          <p id="total-items-count">0</p>
-        </div>
-        <div class="card">
-          <h3>Total Movements</h3>
-          <p id="total-movements-count">0</p>
-        </div>
+        <div class="card"><h3>Total Items</h3><p id="total-items-count">0</p></div>
+        <div class="card"><h3>Total Movements</h3><p id="total-movements-count">0</p></div>
       </div>
 
-      <!-- Forms Section -->
-      <div class="forms-container">
+      <!-- Forms Section (Hidden for Level 1 Viewers) -->
+      <div id="forms-container" class="forms-container hidden">
         <div class="card">
           <h2>Add New Item</h2>
           <form id="item-form">
-            <label for="item-name">Item Name:</label>
-            <input type="text" id="item-name" required placeholder="Enter item name..." />
+            <label>Item Name:</label>
+            <input type="text" id="item-name" required />
             <button type="submit">Add Item</button>
           </form>
         </div>
-
         <div class="card">
           <h2>Record Movement</h2>
           <form id="movement-form">
-            <label for="movement-item">Select Item:</label>
-            <select id="movement-item" required>
-              <option value="">-- Choose Item --</option>
-            </select>
-
-            <label for="movement-type">Movement Type:</label>
+            <label>Select Item:</label>
+            <select id="movement-item" required></select>
+            <label>Movement Type:</label>
             <select id="movement-type" required>
               <option value="IN">IN</option>
               <option value="OUT">OUT</option>
             </select>
-
-            <label for="movement-quantity">Quantity:</label>
+            <label>Quantity:</label>
             <input type="number" id="movement-quantity" min="1" value="1" required />
-
             <button type="submit">Save Movement</button>
           </form>
         </div>
       </div>
 
-      <!-- Current Stock Table -->
+      <!-- Data Tables -->
       <div class="card">
         <h2>Current Stock Balance</h2>
         <table>
-          <thead>
-            <tr>
-              <th>Item Name</th>
-              <th>Current Stock</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Item Name</th><th>Current Stock</th></tr></thead>
           <tbody id="stock-tbody"></tbody>
         </table>
       </div>
-
-      <!-- Recent Movements Table -->
       <div class="card">
         <h2>Recent Movements History</h2>
         <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Item</th>
-              <th>Type</th>
-              <th>Quantity</th>
-              <th>Action</th> <!-- Added Action Header -->
-            </tr>
-          </thead>
+          <thead><tr><th>Date</th><th>Item</th><th>Type</th><th>Qty</th><th id="th-action">Action</th></tr></thead>
           <tbody id="movement-tbody"></tbody>
         </table>
       </div>
@@ -119,181 +131,162 @@
   </div>
 
   <script>
-    // --- Supabase Config ---
     const SUPABASE_URL = "https://nxrgqzeoylialaiplfxp.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_07gbRce8AzguRzBqR4s11A_0P4spj3d"; 
-
     const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // --- DOM Elements ---
-    const authSection = document.getElementById('auth-section');
-    const dashboardSection = document.getElementById('dashboard-section');
-    const authMessage = document.getElementById('auth-message');
-    const emailInput = document.getElementById('email');
-    const passwordInput = document.getElementById('password');
+    let userLevel = 0;
 
-    // --- Auth State Listener ---
-    client.auth.onAuthStateChange((event, session) => {
+    client.auth.onAuthStateChange(async (event, session) => {
       if (session) {
-        authSection.classList.add('hidden');
-        dashboardSection.classList.remove('hidden');
+        document.getElementById('auth-message').textContent = "Loading access...";
+        
+        // Call the get_my_role function
+        const { data: roles, error } = await client.rpc('get_my_role');
+        
+        if (error || !roles || roles.length === 0) {
+          // No access to logistics
+          document.getElementById('auth-message').textContent = "No access to Logistics, ask the module administrator.";
+          await client.auth.signOut();
+          return;
+        }
+
+        const myRole = roles[0];
+        userLevel = myRole.level_number;
+        document.getElementById('user-role-display').textContent = myRole.role_name + " (L" + userLevel + ")";
+        
+        // Hide/Show UI based on level
+        document.getElementById('auth-section').classList.add('hidden');
+        document.getElementById('dashboard-section').classList.remove('hidden');
+        
+        if (userLevel >= 2) document.getElementById('forms-container').classList.remove('hidden');
+        else document.getElementById('forms-container').classList.add('hidden');
+
+        if (userLevel >= 4) {
+          document.getElementById('admin-panel').classList.remove('hidden');
+          loadAccessManagement();
+        } else {
+          document.getElementById('admin-panel').classList.add('hidden');
+        }
+
+        if (userLevel < 3) document.getElementById('th-action').classList.add('hidden');
+        else document.getElementById('th-action').classList.remove('hidden');
+
         refreshAll(); 
       } else {
-        authSection.classList.remove('hidden');
-        dashboardSection.classList.add('hidden');
+        document.getElementById('auth-section').classList.remove('hidden');
+        document.getElementById('dashboard-section').classList.add('hidden');
+        document.getElementById('auth-message').textContent = "";
       }
-    });
-
-    // --- Auth Functions ---
-    document.getElementById('signup-btn').addEventListener('click', async () => {
-      authMessage.textContent = "Processing...";
-      const { data, error } = await client.auth.signUp({
-        email: emailInput.value,
-        password: passwordInput.value,
-      });
-      if (error) authMessage.textContent = error.message;
-      else authMessage.textContent = "Check your email for confirmation, or log in if auto-confirmed.";
     });
 
     document.getElementById('login-btn').addEventListener('click', async () => {
-      authMessage.textContent = "Processing...";
-      const { data, error } = await client.auth.signInWithPassword({
-        email: emailInput.value,
-        password: passwordInput.value,
+      document.getElementById('auth-message').textContent = "Authenticating...";
+      const { error } = await client.auth.signInWithPassword({
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value,
       });
-      if (error) authMessage.textContent = "Login failed: " + error.message;
-      else {
-        authMessage.textContent = "";
-        emailInput.value = "";
-        passwordInput.value = "";
-      }
+      if (error) document.getElementById('auth-message').textContent = error.message;
     });
 
-    document.getElementById('logout-btn').addEventListener('click', async () => {
-      await client.auth.signOut();
-    });
+    document.getElementById('logout-btn').addEventListener('click', async () => await client.auth.signOut());
 
-    // --- Load Data Using RPC Functions ---
     async function refreshAll() {
       await Promise.all([loadStock(), loadMovements(), loadItemDropdown()]);
     }
 
     async function loadItemDropdown() {
-      const { data: items, error } = await client.rpc('list_items');
-      if (error) return console.error('Error loading items:', error);
-
+      const { data } = await client.rpc('list_items');
       const dropdown = document.getElementById('movement-item');
       dropdown.innerHTML = '<option value="">-- Choose Item --</option>';
-      (items || []).forEach(item => {
+      (data || []).forEach(item => {
         const opt = document.createElement('option');
-        opt.value = item.id;
-        opt.textContent = item.name;
+        opt.value = item.id; opt.textContent = item.name;
         dropdown.appendChild(opt);
       });
-      document.getElementById('total-items-count').textContent = (items || []).length;
+      document.getElementById('total-items-count').textContent = (data || []).length;
     }
 
     async function loadStock() {
-      const { data: stock, error } = await client.rpc('get_stock');
-      if (error) return console.error('Error loading stock:', error);
-
+      const { data } = await client.rpc('get_stock');
       const tbody = document.getElementById('stock-tbody');
       tbody.innerHTML = '';
-      (stock || []).forEach(row => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${row.name}</td><td><strong>${row.current_stock}</strong></td>`;
-        tbody.appendChild(tr);
+      (data || []).forEach(row => {
+        tbody.innerHTML += `<tr><td>${row.name}</td><td><strong>${row.current_stock}</strong></td></tr>`;
       });
     }
 
-    // --- Updated loadMovements with Edit Button ---
     async function loadMovements() {
-      const { data: movements, error } = await client.rpc('list_movements');
-      if (error) return console.error('Error loading movements:', error);
-
+      const { data } = await client.rpc('list_movements');
       const tbody = document.getElementById('movement-tbody');
       tbody.innerHTML = '';
-      (movements || []).forEach(m => {
-        const tr = document.createElement('tr');
-        const formattedDate = new Date(m.movement_date).toLocaleString();
-        
-        tr.innerHTML = `
-          <td>${formattedDate}</td>
-          <td>${m.item_name}</td>
-          <td><span class="badge ${m.movement_type.toLowerCase()}">${m.movement_type}</span></td>
-          <td>${m.quantity}</td>
-          <td>
-            <button onclick="editMovement(${m.id}, ${m.item_id}, '${m.movement_type}', ${m.quantity})" 
-                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem; background-color: var(--text-muted);">
-              Edit
-            </button>
-          </td>
-        `;
-        tbody.appendChild(tr);
+      (data || []).forEach(m => {
+        const date = new Date(m.movement_date).toLocaleString();
+        let editBtn = '';
+        if (userLevel >= 3) {
+          editBtn = `<td><button onclick="editMovement(${m.id}, ${m.item_id}, '${m.movement_type}', ${m.quantity})" style="padding:0.25rem;">Edit</button></td>`;
+        }
+        tbody.innerHTML += `<tr><td>${date}</td><td>${m.item_name}</td><td>${m.movement_type}</td><td>${m.quantity}</td>${editBtn}</tr>`;
       });
-      document.getElementById('total-movements-count').textContent = (movements || []).length;
+      document.getElementById('total-movements-count').textContent = (data || []).length;
     }
 
-    // --- New Edit Functionality ---
     window.editMovement = async function(id, itemId, type, currentQuantity) {
-      const newQuantity = prompt(`Enter new quantity for this movement (Current: ${currentQuantity}):`, currentQuantity);
-
-      if (newQuantity === null || newQuantity.trim() === '') return;
-
-      const parsedQuantity = parseInt(newQuantity);
-      if (isNaN(parsedQuantity) || parsedQuantity <= 0) {
-        alert("Please enter a valid number greater than 0.");
-        return;
-      }
-
-      const { error } = await client.rpc('update_movement', {
-        p_id: id,
-        p_item_id: itemId,
-        p_movement_type: type,
-        p_quantity: parsedQuantity
-      });
-
-      if (error) {
-        alert('Error updating movement: ' + error.message);
-      } else {
-        await refreshAll();
-      }
+      if (userLevel < 3) return;
+      const newQuantity = prompt(`Enter new quantity:`, currentQuantity);
+      if (!newQuantity) return;
+      const { error } = await client.rpc('update_movement', { p_id: id, p_item_id: itemId, p_movement_type: type, p_quantity: parseInt(newQuantity) });
+      if (error) alert(error.message); else refreshAll();
     };
 
-    // --- Form Submissions (RPC) ---
     document.getElementById('item-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const name = document.getElementById('item-name').value.trim();
-      if (!name) return;
-
-      const { error } = await client.rpc('add_item', { p_name: name });
-      if (error) alert('Error adding item: ' + error.message);
-      else {
-        document.getElementById('item-name').value = '';
-        await refreshAll();
-      }
+      const { error } = await client.rpc('add_item', { p_name: document.getElementById('item-name').value });
+      if (error) alert(error.message); else { document.getElementById('item-name').value = ''; refreshAll(); }
     });
 
     document.getElementById('movement-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const itemId = parseInt(document.getElementById('movement-item').value);
-      const type = document.getElementById('movement-type').value;
-      const quantity = parseInt(document.getElementById('movement-quantity').value);
-
-      if (!itemId || quantity <= 0) return;
-
       const { error } = await client.rpc('add_movement', {
-        p_item_id: itemId,
-        p_movement_type: type,
-        p_quantity: quantity
+        p_item_id: parseInt(document.getElementById('movement-item').value),
+        p_movement_type: document.getElementById('movement-type').value,
+        p_quantity: parseInt(document.getElementById('movement-quantity').value)
+      });
+      if (error) alert(error.message); else refreshAll();
+    });
+
+    // --- Admin Access Management Functions ---
+    async function loadAccessManagement() {
+      const [{ data: accs }, { data: hist }] = await Promise.all([client.rpc('list_accounts_with_roles'), client.rpc('list_history')]);
+      
+      const tbodyA = document.getElementById('accounts-tbody');
+      tbodyA.innerHTML = '';
+      (accs || []).forEach(a => {
+        tbodyA.innerHTML += `<tr><td>${a.email}</td><td>${a.role_name}</td>
+          <td><button onclick="revokeRole('${a.email}')" style="background:var(--danger);padding:0.25rem;">Revoke</button></td></tr>`;
       });
 
-      if (error) alert('Error recording movement: ' + error.message);
-      else {
-        document.getElementById('movement-quantity').value = '1';
-        await refreshAll();
-      }
+      const tbodyH = document.getElementById('history-tbody');
+      tbodyH.innerHTML = '';
+      (hist || []).forEach(h => {
+        const date = new Date(h.changed_at).toLocaleDateString();
+        tbodyH.innerHTML += `<tr><td>${h.target_email}</td><td>${h.action} to ${h.new_role || 'None'}</td><td>${date}</td></tr>`;
+      });
+    }
+
+    document.getElementById('assign-role-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('target-email').value;
+      const role = document.getElementById('target-role').value;
+      const { error } = await client.rpc('assign_role', { p_email: email, p_role_code: role });
+      if (error) alert("Error: " + error.message); else loadAccessManagement();
     });
+
+    window.revokeRole = async function(email) {
+      if (!confirm(`Revoke role for ${email}?`)) return;
+      const { error } = await client.rpc('revoke_role', { p_email: email });
+      if (error) alert("Error: " + error.message); else loadAccessManagement();
+    };
   </script>
 </body>
 </html>
