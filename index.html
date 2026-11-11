@@ -6,6 +6,7 @@
   <title>TCM Item Movement System</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="portal-client.js?v=20261111-native"></script>
   <style>
     .hidden { display: none !important; }
     #auth-section { max-width: 400px; margin: 4rem auto; text-align: center; }
@@ -133,8 +134,9 @@
   <script>
     const SUPABASE_URL = "https://nxrgqzeoylialaiplfxp.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_07gbRce8AzguRzBqR4s11A_0P4spj3d"; 
-    const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const client = window.TCMSOriginalClient || supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    function safeText(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     let userLevel = 0;
 
     client.auth.onAuthStateChange(async (event, session) => {
@@ -211,7 +213,7 @@
       const tbody = document.getElementById('stock-tbody');
       tbody.innerHTML = '';
       (data || []).forEach(row => {
-        tbody.innerHTML += `<tr><td>${row.name}</td><td><strong>${row.current_stock}</strong></td></tr>`;
+        tbody.innerHTML += `<tr><td>${safeText(row.name)}</td><td><strong>${row.current_stock}</strong></td></tr>`;
       });
     }
 
@@ -225,7 +227,7 @@
         if (userLevel >= 3) {
           editBtn = `<td><button onclick="editMovement(${m.id}, ${m.item_id}, '${m.movement_type}', ${m.quantity})" style="padding:0.25rem;">Edit</button></td>`;
         }
-        tbody.innerHTML += `<tr><td>${date}</td><td>${m.item_name}</td><td>${m.movement_type}</td><td>${m.quantity}</td>${editBtn}</tr>`;
+        tbody.innerHTML += `<tr><td>${date}</td><td>${safeText(m.item_name)}</td><td>${m.movement_type}</td><td>${m.quantity}</td>${editBtn}</tr>`;
       });
       document.getElementById('total-movements-count').textContent = (data || []).length;
     }
@@ -234,7 +236,7 @@
       if (userLevel < 3) return;
       const newQuantity = prompt(`Enter new quantity:`, currentQuantity);
       if (!newQuantity) return;
-      const { error } = await client.rpc('update_movement', { p_id: id, p_item_id: itemId, p_movement_type: type, p_quantity: parseInt(newQuantity) });
+      const { error } = await client.rpc('update_movement', { p_id: id, p_item_id: itemId, p_movement_type: type, p_quantity: parseInt(newQuantity), ...(window.TCMSOriginalClient ? {p_previous_quantity: currentQuantity} : {}) });
       if (error) alert(error.message); else refreshAll();
     };
 
@@ -261,15 +263,15 @@
       const tbodyA = document.getElementById('accounts-tbody');
       tbodyA.innerHTML = '';
       (accs || []).forEach(a => {
-        tbodyA.innerHTML += `<tr><td>${a.email}</td><td>${a.role_name}</td>
-          <td><button onclick="revokeRole('${a.email}')" style="background:var(--danger);padding:0.25rem;">Revoke</button></td></tr>`;
+        tbodyA.innerHTML += `<tr><td>${safeText(a.email)}</td><td>${safeText(a.role_name)}</td>
+          <td><button data-email="${safeText(a.email)}" onclick="revokeRole(this.dataset.email)" style="background:var(--danger);padding:0.25rem;">Revoke</button></td></tr>`;
       });
 
       const tbodyH = document.getElementById('history-tbody');
       tbodyH.innerHTML = '';
       (hist || []).forEach(h => {
         const date = new Date(h.changed_at).toLocaleDateString();
-        tbodyH.innerHTML += `<tr><td>${h.target_email}</td><td>${h.action} to ${h.new_role || 'None'}</td><td>${date}</td></tr>`;
+        tbodyH.innerHTML += `<tr><td>${safeText(h.target_email)}</td><td>${safeText(h.action)} to ${safeText(h.new_role || 'None')}</td><td>${date}</td></tr>`;
       });
     }
 
