@@ -8,3 +8,8 @@
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 
 .portal-return,.workspace-breadcrumb a{display:inline-flex;align-items:center;min-height:42px;padding:8px 14px;border:1px solid var(--border-color);border-radius:9px;background:var(--card-bg);text-decoration:none;font-weight:600}.portal-return:hover,.workspace-breadcrumb a:hover,.brand:hover{text-decoration:none;color:var(--success)}
+
+/* TCMS theme action colors. */
+:root{--action:#1763bd;--action-text:#fff}
+:root[data-theme=dark]{--action:#78ddb0;--action-text:#082b22;--primary-color:#78ddb0}
+body button,body #logout-btn,body #assign-role-form button,body .portal-return,body .workspace-breadcrumb a{background:var(--action)!important;color:var(--action-text)!important;border-color:var(--action)!important}
