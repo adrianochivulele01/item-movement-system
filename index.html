@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TCM Item Movement System</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>Warehouse | TCMS Logistics</title>
+  <link rel="stylesheet" href="style.css?v=20261111-design" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="portal-client.js?v=20261111-native"></script>
+  <script src="portal-client.js?v=20261111-design"></script>
   <style>
     .hidden { display: none !important; }
     #auth-section { max-width: 400px; margin: 4rem auto; text-align: center; }
@@ -15,12 +15,14 @@
   </style>
 </head>
 <body>
+  <header class="workspace-topbar"><a class="brand" href="https://fernandocossa-bot.github.io/tcms-portal/home.html">TCMS <span>Tzu Chi Mozambique</span></a><div class="preferences"><label for="language">Language</label><select id="language"><option value="en">EN</option><option value="pt">PT</option><option value="zh-Hant">中文</option></select><button type="button" id="theme-toggle" aria-label="Switch appearance">◐</button></div></header>
+  <nav class="workspace-breadcrumb" aria-label="Breadcrumb"><a href="https://fernandocossa-bot.github.io/tcms-portal/logistics.html">Logistics</a><span>/</span><span>Warehouse</span></nav>
   <div class="container">
     
     <!-- AUTHENTICATION SECTION (Sign Up Removed) -->
     <div id="auth-section" class="card">
-      <h2>TCM System Login</h2>
-      <form id="auth-form">
+      <p class="eyebrow">TCMS LOGISTICS</p><h2>Connecting your workspace</h2><p>Use your Portal session to open the warehouse.</p><a class="portal-return" href="https://fernandocossa-bot.github.io/tcms-portal/module-launch.html">Open from Portal →</a>
+      <form id="auth-form" hidden>
         <label for="email">Email:</label>
         <input type="email" id="email" required placeholder="name@example.com" />
         
@@ -36,12 +38,60 @@
     <div id="dashboard-section" class="hidden">
       <div class="header-bar">
         <div>
-          <h1 style="display: inline-block;">Item Movement & Inventory System</h1>
+          <p class="eyebrow">LOGISTICS / WAREHOUSE</p><h1>Item Movement</h1><p class="workspace-intro">A clear view of every item, every movement.</p>
           <span id="user-role-display" class="role-badge">Loading Role...</span>
         </div>
-        <button id="logout-btn" style="background-color: var(--danger);">Sign Out</button>
+        <button id="logout-btn" style="background-color: var(--danger);">Back to logistics</button>
       </div>
 
+      <!-- Dashboard Cards -->
+      <div class="dashboard-grid" id="overview">
+        <div class="card"><h3>Total Items</h3><p id="total-items-count">0</p></div>
+        <div class="card"><h3>Total Movements</h3><p id="total-movements-count">0</p></div>
+      </div>
+
+      <!-- Forms Section (Hidden for Level 1 Viewers) -->
+      <div id="forms-container" class="forms-container hidden">
+        <div class="card">
+          <h2>Add New Item</h2>
+          <form id="item-form">
+            <label>Item Name:</label>
+            <input type="text" id="item-name" required />
+            <button type="submit">Add Item</button>
+          </form>
+        </div>
+        <div class="card">
+          <h2>Record Movement</h2>
+          <form id="movement-form">
+            <label>Select Item:</label>
+            <select id="movement-item" required></select>
+            <label>Movement Type:</label>
+            <select id="movement-type" required>
+              <option value="IN">IN</option>
+              <option value="OUT">OUT</option>
+            </select>
+            <label>Quantity:</label>
+            <input type="number" id="movement-quantity" min="1" value="1" required />
+            <button type="submit">Save Movement</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Data Tables -->
+      <div class="card stock-card" id="stock">
+        <h2>Current Stock Balance</h2>
+        <table>
+          <thead><tr><th>Item Name</th><th>Current Stock</th></tr></thead>
+          <tbody id="stock-tbody"></tbody>
+        </table>
+      </div>
+      <div class="card history-card" id="movements">
+        <h2>Recent Movements History</h2>
+        <table>
+          <thead><tr><th>Date</th><th>Item</th><th>Type</th><th>Qty</th><th id="th-action">Action</th></tr></thead>
+          <tbody id="movement-tbody"></tbody>
+        </table>
+      </div>
       <!-- Administrator Access Management (Level 4 Only) -->
       <div id="admin-panel" class="card hidden" style="border: 2px solid #4f46e5;">
         <h2>Access Management (Administrator Only)</h2>
@@ -80,54 +130,6 @@
         </div>
       </div>
 
-      <!-- Dashboard Cards -->
-      <div class="dashboard-grid">
-        <div class="card"><h3>Total Items</h3><p id="total-items-count">0</p></div>
-        <div class="card"><h3>Total Movements</h3><p id="total-movements-count">0</p></div>
-      </div>
-
-      <!-- Forms Section (Hidden for Level 1 Viewers) -->
-      <div id="forms-container" class="forms-container hidden">
-        <div class="card">
-          <h2>Add New Item</h2>
-          <form id="item-form">
-            <label>Item Name:</label>
-            <input type="text" id="item-name" required />
-            <button type="submit">Add Item</button>
-          </form>
-        </div>
-        <div class="card">
-          <h2>Record Movement</h2>
-          <form id="movement-form">
-            <label>Select Item:</label>
-            <select id="movement-item" required></select>
-            <label>Movement Type:</label>
-            <select id="movement-type" required>
-              <option value="IN">IN</option>
-              <option value="OUT">OUT</option>
-            </select>
-            <label>Quantity:</label>
-            <input type="number" id="movement-quantity" min="1" value="1" required />
-            <button type="submit">Save Movement</button>
-          </form>
-        </div>
-      </div>
-
-      <!-- Data Tables -->
-      <div class="card">
-        <h2>Current Stock Balance</h2>
-        <table>
-          <thead><tr><th>Item Name</th><th>Current Stock</th></tr></thead>
-          <tbody id="stock-tbody"></tbody>
-        </table>
-      </div>
-      <div class="card">
-        <h2>Recent Movements History</h2>
-        <table>
-          <thead><tr><th>Date</th><th>Item</th><th>Type</th><th>Qty</th><th id="th-action">Action</th></tr></thead>
-          <tbody id="movement-tbody"></tbody>
-        </table>
-      </div>
     </div>
   </div>
 
@@ -289,5 +291,6 @@
       if (error) alert("Error: " + error.message); else loadAccessManagement();
     };
   </script>
+<script src="presentation.js?v=20261111-design"></script>
 </body>
 </html>
