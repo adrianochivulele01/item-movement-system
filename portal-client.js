@@ -1,6 +1,6 @@
 // Authentication/data transport only. The module's HTML, styles and rendering stay native.
 (() => {
- if(new URL(location.href).searchParams.get('tcms')!=='1'){location.replace('https://fernandocossa-bot.github.io/tcms-portal/module-launch.html');return;}
+ if(new URL(location.href).searchParams.get('tcms')!=='1'){location.replace('https://fernandocossa-bot.github.io/tcms-portal/module-launch.html');}
  const origin='https://fernandocossa-bot.github.io', parent=window.opener;
  const channel='tcms-item-movement-v1', waiting=new Map(), listeners=new Set();
  let session=null,stopped=false;
